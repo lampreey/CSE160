@@ -6,7 +6,7 @@ class Cube{
         this.textureNum = -1;
     }
  
-render(){
+r//ender(){
         var rgba = this.color;
 
         gl.uniform1i(u_whichTexture, this.textureNum);
