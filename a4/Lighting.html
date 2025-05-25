@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Lighting</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center; 
+            align-items: center;     
+            height: 100vh;           
+            background-color: rgb(180, 180, 180);
+            overflow: hidden;      
+        }
+        canvas {
+            display: block;          
+        }
+        #fpsCounter {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: black;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body onload="main()">
+    <canvas id="webgl" width="1280" height="720">
+        Please use a browser that supports "canvas"s
+    </canvas>
+
+    <div id="fpsCounter">
+        FPS: 0
+    </div>
+
+    <p>
+    <button type = "button" id = "normalOn"> Normal On </button>
+    <button type = "button" id = "normalOff"> Normal Off </button>
+
+    <br>
+
+    <button type = "button" id = "lightOn"> Light On </button>
+    <button type = "button" id = "lightOff"> Light Off </button>
+
+    <br>
+
+    Light X <input type="range" min="-250" max="250" value="0" class="slider" id="lightSlideX">
+    Light Y <input type="range" min="-250" max="250" value="0" class="slider" id="lightSlideY">
+    Light Z <input type="range" min="-250" max="250" value="0" class="slider" id="lightSlideZ">
+
+    <br>
+
+    <label>Spotlight X:</label>
+    <input type="range" id="spotlightSlideX" min="-5" max="5" step="0.1" value="0">
+
+    <label>Spotlight Y:</label>
+    <input type="range" id="spotlightSlideY" min="-5" max="5" step="0.1" value="3">
+
+    <label>Spotlight Z:</label>
+    <input type="range" id="spotlightSlideZ" min="-5" max="5" step="0.1" value="2">
+
+    <br>
+    <label>Light Color:</label>
+    <input type="range" id="lightColorHue" min="0" max="360" value="0" oninput="updateLightColor()">
+
+    <p>
+
+    <script src="lib/webgl-utils.js"></script>
+    <script src="lib/webgl-debug.js"></script>
+    <script src="lib/cuon-utils.js"></script>
+    <script src="lib/cuon-matrix.js"></script>
+    <script src="OBJModel.js"></script>
+    <script src="Triangle.js"></script>
+    <script src="Camera.js"></script>
+    <script src="Cube.js"></script>
+    <script src="Sphere.js"></script>
+    <script src="BlockyAnimal.js"></script>
+    <script src="Octahedron.js"></script>
+    <script src="Lighting.js"></script>
+</body>
+</html>
