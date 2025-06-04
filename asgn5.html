@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Three.js</title>
+    <style>
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+#c {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: pointer;
+}
+#coinCounter {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: #ffff00;
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  font-weight: bold;
+  background: rgba(0,0,0,0.7);
+  padding: 10px;
+  border-radius: 5px;
+  z-index: 100;
+}
+#healthCounter {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: #ff0000;
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  font-weight: bold;
+  background: rgba(0,0,0,0.7);
+  padding: 10px;
+  border-radius: 5px;
+  z-index: 100;
+  display: none;
+}
+#gameOver {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: Arial, sans-serif;
+  font-size: 48px;
+  z-index: 200;
+}
+#restartButton {
+  margin-top: 20px;
+  padding: 10px 20px;
+  font-size: 24px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  z-index: 100;
+  pointer-events: none;
+  display: none;
+}
+#crosshair::before, #crosshair::after {
+  content: '';
+  position: absolute;
+  background: white;
+}
+#crosshair::before {
+  width: 2px;
+  height: 20px;
+  left: 9px;
+  top: 0;
+}
+#crosshair::after {
+  width: 20px;
+  height: 2px;
+  left: 0;
+  top: 9px;
+}
+    </style>
+  </head>
+  <body>
+    <div id="healthCounter">Health: 100</div>
+    <div id="coinCounter">Coins: 0</div>
+    <div id="crosshair"></div>
+    <div id="gameOver">
+      <h1>GAME OVER</h1>
+      <button id="restartButton">Play Again</button>
+    </div>
+    <canvas id="c"></canvas>
+  <script  type="importmap">{
+    "imports": {
+        "three": "https://threejs.org/build/three.module.js",
+        "three/addons/": "https://threejs.org/examples/jsm/"
+    }
+}</script>
+  </body>
+  <script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+
+let camera, scene, renderer;
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+let canJump = false;
+
+let prevTime = performance.now();
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+const vertex = new THREE.Vector3();
+const color = new THREE.Color();
+
+let euler = new THREE.Euler(0, 0, 0, 'YXZ');
+let PI_2 = Math.PI / 2;
+
+let coins = [];
+let coinCount = 0;
+let gunModel = null;
+
+let playerHealth = 0;
+let isGameOver = false;
+let lastDamageTime = 0;
+const damageCooldown = 1; 
+
+let projectiles = [];
+const projectileGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+const projectileMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+
+let enemies = [];
+const enemyGeometry = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8);
+const enemyMaterial = new THREE.MeshPhongMaterial({ color: 0x8B0000 }); 
+let enemySpawnTimer = 0;
+const enemySpawnInterval = 3; 
+
+init();
+animate();
+
+function init() {
+    const container = document.querySelector('#c');
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(-1.8, 1.6, 2.7); 
+    
+    scene = new THREE.Scene();
+    
+    new RGBELoader()
+        .load('sky.hdr', function (texture) {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+            scene.background = texture;
+            scene.environment = texture;
+            
+            const loader = new GLTFLoader();
+            loader.load('tw_street_night.glb', async function (gltf) {
+                const model = gltf.scene;
+                await renderer.compileAsync(model, camera, scene);
+                scene.add(model);
+            });
+
+            loader.load('tw_street_night.glb', async function (gltf2) {
+                const model2 = gltf2.scene;
+                model2.position.set(4.925, 0, -20.1);
+                model2.rotation.set(0, Math.PI, 0); 
+                await renderer.compileAsync(model2, camera, scene);
+                scene.add(model2);
+            });
+
+            loader.load('car_for_games_unity.glb', async function (gltf3) {
+                const model3 = gltf3.scene;
+                model3.scale.set(1.2, 1.2, 1.2);
+                model3.position.set(5.5, -0.2, -1);
+                model3.rotation.set(0,  -Math.PI / 2, 0); 
+                await renderer.compileAsync(model3, camera, scene);
+                scene.add(model3);
+            });
+
+            loader.load('car.glb', async function (gltf4) {
+                const model4 = gltf4.scene;
+                model4.position.set(-16.5, -0.25, -19.2);
+                model4.scale.set(0.8, 0.8, 0.8);
+                model4.rotation.set(0, -Math.PI / 2, 0); 
+                await renderer.compileAsync(model4, camera, scene);
+                scene.add(model4);
+            });
+
+            loader.load('rally.glb', async function (gltf5) {
+                const model5 = gltf5.scene;
+                model5.position.set(13, -0.2, -19.2);
+                model5.scale.set(1.2, 1.2, 1.2);
+                await renderer.compileAsync(model5, camera, scene);
+                scene.add(model5);
+            });
+        });
+
+    renderer = new THREE.WebGLRenderer({ canvas: container, antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1;
+
+    const blocker = document.getElementById('instructions');
+    const instructions = document.getElementById('instructions');
+
+    function onPointerLockChange() {
+        if (document.pointerLockElement === container) {
+            instructions.style.display = 'none';
+            if (gunModel) {
+                document.getElementById('crosshair').style.display = 'block';
+            }
+        } else {
+            instructions.style.display = 'block';
+            document.getElementById('crosshair').style.display = 'none';
+        }
+    }
+
+    function onPointerLockError() {
+        console.log('Pointer lock error');
+    }
+
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    document.addEventListener('pointerlockerror', onPointerLockError);
+
+    container.addEventListener('click', function () {
+        if (document.pointerLockElement !== container) {
+            container.requestPointerLock();
+        } else if (gunModel && !isGameOver) {
+            shoot();
+        }
+    });
+
+    function onMouseMove(event) {
+        if (document.pointerLockElement === container && !isGameOver) {
+            const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+            const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+            euler.setFromQuaternion(camera.quaternion);
+            euler.y -= movementX * 0.002;
+            euler.x -= movementY * 0.002;
+            euler.x = Math.max(PI_2 - Math.PI, Math.min(PI_2, euler.x));
+            camera.quaternion.setFromEuler(euler);
+        }
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+
+    const onKeyDown = function (event) {
+        if (isGameOver) return;
+        
+        switch (event.code) {
+            case 'KeyW':
+                moveForward = true;
+                break;
+            case 'KeyA':
+                moveRight = true;
+                break;
+            case 'KeyS':
+                moveBackward = true;
+                break;
+            case 'KeyD':
+                moveLeft = true;
+                break;
+            case 'Space':
+                if (canJump === true) velocity.y += 20;
+                canJump = false;
+                break;
+        }
+    };
+
+    const onKeyUp = function (event) {
+        switch (event.code) {
+            case 'KeyW':
+                moveForward = false;
+                break;
+            case 'KeyA':
+                moveRight = false;
+                break;
+            case 'KeyS':
+                moveBackward = false;
+                break;
+            case 'KeyD':
+                moveLeft = false;
+                break;
+        }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+
+    window.addEventListener('resize', onWindowResize);
+}
+
+function shoot() {
+    if (!gunModel || isGameOver) return;
+
+    const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
+    
+    const gunBarrel = new THREE.Vector3(0.4, -0.1, -0.7); 
+    gunBarrel.applyMatrix4(gunModel.matrixWorld);
+    
+    projectile.position.copy(gunBarrel);
+    
+    const shootDirection = new THREE.Vector3(0, 0, -1);
+    shootDirection.applyQuaternion(camera.quaternion);
+
+    scene.add(projectile);
+    projectiles.push({
+        mesh: projectile,
+        velocity: shootDirection.multiplyScalar(50), 
+        life: 3.0
+    });
+}
+
+function spawnEnemy() {
+    if (!gunModel || isGameOver) return; 
+    
+    const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
+    
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 15 + Math.random() * 20; 
+    
+    const spawnX = camera.position.x + Math.cos(angle) * distance;
+    const spawnZ = camera.position.z + Math.sin(angle) * distance;
+    
+    enemy.position.set(spawnX, 1, spawnZ);
+
+    scene.add(enemy);
+    enemies.push({
+        mesh: enemy,
+        health: 1,
+        speed: 2 + Math.random() * 2, 
+        lastDamageTime: 0
+    });
+}
+
+function updateEnemies(delta) {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const enemy = enemies[i];
+
+        const direction = new THREE.Vector3();
+        direction.subVectors(camera.position, enemy.mesh.position);
+        direction.y = 0; 
+        direction.normalize();
+        
+        enemy.mesh.position.add(direction.multiplyScalar(enemy.speed * delta));
+        enemy.mesh.position.y = 1; 
+        
+        for (let j = projectiles.length - 1; j >= 0; j--) {
+            const projectile = projectiles[j];
+            const distance = enemy.mesh.position.distanceTo(projectile.mesh.position);
+            
+            if (distance < 0.5) { 
+                scene.remove(projectile.mesh);
+                projectiles.splice(j, 1);
+                
+                enemy.health--;
+                enemy.lastDamageTime = performance.now();
+                
+                if (enemy.health <= 0) {
+                    scene.remove(enemy.mesh);
+                    enemies.splice(i, 1);
+                }
+                break;
+            }
+        }
+        
+        if (camera.position.distanceTo(enemy.mesh.position) < 2) {
+            const currentTime = performance.now() / 1000;
+            if (currentTime - lastDamageTime > damageCooldown) {
+                playerHealth -= 10;
+                lastDamageTime = currentTime;
+                document.getElementById('healthCounter').textContent = `Health: ${playerHealth}`;
+                
+                document.body.style.backgroundColor = 'red';
+                setTimeout(() => {
+                    document.body.style.backgroundColor = '';
+                }, 100);
+                
+                if (playerHealth <= 0) {
+                    gameOver();
+                }
+            }
+        }
+    }
+}
+
+function updateProjectiles(delta) {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const proj = projectiles[i];
+        
+        proj.mesh.position.add(proj.velocity.clone().multiplyScalar(delta));
+        
+        proj.life -= delta;
+        
+        if (proj.life <= 0 || proj.mesh.position.y < -5) {
+            scene.remove(proj.mesh);
+            projectiles.splice(i, 1);
+        }
+    }
+}
+
+function loadGunModel() {
+    const loader = new GLTFLoader();
+    loader.load('gun.glb', async function (gltf) {
+        gunModel = gltf.scene;
+        gunModel.scale.set(0.0015, 0.0015, 0.0015);
+
+        gunModel.traverse((child) => {
+            if (child.isMesh) {
+                child.rotation.set(0, 0, Math.PI);
+                child.geometry.computeBoundingBox(); 
+            }
+        });
+        await renderer.compileAsync(gunModel, camera, scene);
+        scene.add(gunModel);
+        
+        // Initialize player health
+        playerHealth = 100;
+        document.getElementById('healthCounter').textContent = `Health: ${playerHealth}`;
+        document.getElementById('healthCounter').style.display = 'block';
+        
+        // Show crosshair when pointer locked
+        if (document.pointerLockElement === document.querySelector('#c')) {
+            document.getElementById('crosshair').style.display = 'block';
+        }
+        
+        document.getElementById('coinCounter').textContent = 'Gun collected, shoot the incoming enemies!';
+        document.getElementById('coinCounter').style.color = '#00ff00'; // Green color
+    });
+}
+
+function updateGunPosition() {
+    if (!gunModel || isGameOver) return;
+    
+    const gunOffset = new THREE.Vector3(0.3, -0.2, -0.5);
+    gunOffset.applyQuaternion(camera.quaternion);
+    gunModel.position.copy(camera.position).add(gunOffset);
+    gunModel.quaternion.copy(camera.quaternion);
+}
+
+function gameOver() {
+    isGameOver = true;
+    document.getElementById('gameOver').style.display = 'flex';
+    document.getElementById('crosshair').style.display = 'none';
+    document.exitPointerLock();
+}
+
+function restartGame() {
+    isGameOver = false;
+    playerHealth = 0;
+    coinCount = 0;
+    
+    coins.forEach(coin => {
+        coin.visible = true;
+        coin.userData.collected = false;
+    });
+    
+    enemies.forEach(enemy => scene.remove(enemy.mesh));
+    enemies = [];
+    
+    projectiles.forEach(proj => scene.remove(proj.mesh));
+    projectiles = [];
+    
+    if (gunModel) {
+        scene.remove(gunModel);
+        gunModel = null;
+    }
+    
+
+    document.getElementById('coinCounter').textContent = `Coins: 0`;
+    document.getElementById('coinCounter').style.color = '#ffff00';
+    document.getElementById('healthCounter').style.display = 'none';
+    document.getElementById('gameOver').style.display = 'none';
+    document.getElementById('crosshair').style.display = 'none';
+    
+    camera.position.set(-1.8, 1.6, 2.7);
+    camera.rotation.set(0, 0, 0);
+    velocity.set(0, 0, 0);
+}
+
+document.getElementById('restartButton').addEventListener('click', restartGame);
+
+{
+    const color0 = 0xFFFFFF;
+    const intensity0 = 0.1;
+    const light0 = new THREE.DirectionalLight(color0, intensity0);
+    light0.position.set(0, 70, -10);
+    light0.target.position.set(0, 0, -10);
+    scene.add(light0);
+    scene.add(light0.target0);
+    const helper0 = new THREE.DirectionalLightHelper( light0 );
+    //scene.add( helper0 );
+
+    const color = 0x696969;
+    const intensity = 1;
+    const light = new THREE.AmbientLight(color, intensity);
+    scene.add(light);
+
+    const color1 = 0xf6d484;
+    const intensity1 = 50;
+    const light1 = new THREE.PointLight( color1, intensity1 );
+    light1.position.set( 0, 60, -10 );
+    light1.decay = 1;
+    scene.add( light1 );
+
+    const helper = new THREE.PointLightHelper( light1 );
+    //scene.add( helper );
+
+    const spotLight = new THREE.SpotLight( 0xF9F9D1, 100 );
+    spotLight.position.set( 23, 7.5, 0 );
+    spotLight.target.position.set( 23, 0, 0 );
+    spotLight.penumbra = 0.2;
+    spotLight.decay = 2;
+    spotLight.distance = 200;
+    scene.add( spotLight );
+
+    const lightHelper = new THREE.SpotLightHelper( spotLight );
+	//scene.add( lightHelper );
+
+    const spotLight2 = new THREE.SpotLight( 0xF9F9D1, 100 );
+    spotLight2.position.set( -9.5, 7.5, 0 );
+    spotLight2.target.position.set( -9.5, 0, 0 );
+    spotLight2.penumbra = 0.2;
+    spotLight2.decay = 2;
+    spotLight2.distance = 200;
+    scene.add( spotLight2 );
+
+    const lightHelper2 = new THREE.SpotLightHelper( spotLight2 );
+	//scene.add( lightHelper2 );
+
+    const spotLight3 = new THREE.SpotLight( 0xF9F9D1, 100 );
+    spotLight3.position.set( 14.25, 7.5, -20 );
+    spotLight3.target.position.set( 14.25, 0, -20 );
+    spotLight3.penumbra = 0.2;
+    spotLight3.decay = 2;
+    spotLight3.distance = 200;
+    scene.add( spotLight3 );
+
+    const lightHelper3 = new THREE.SpotLightHelper( spotLight3 );
+	//scene.add( lightHelper3 );
+
+    const spotLight4 = new THREE.SpotLight( 0xF9F9D1, 100 );
+    spotLight4.position.set( -18.5, 7.5, -20 );
+    spotLight4.target.position.set( -18.5, 0, -20 );
+    spotLight4.penumbra = 0.2;
+    spotLight4.decay = 2;
+    spotLight4.distance = 200;
+    scene.add( spotLight4 );
+
+    const lightHelper4 = new THREE.SpotLightHelper( spotLight4 );
+	//scene.add( lightHelper4 );
+}
+
+{
+    const boxWidth = 0.2;
+	const boxHeight = 0.1;
+	const boxDepth = 0.2;
+	const geometry = new THREE.BoxGeometry( boxWidth, boxHeight, boxDepth );
+
+	const material = new THREE.MeshBasicMaterial( { color: 0xF9F9D1 } ); 
+
+	const cube = new THREE.Mesh( geometry, material );
+    cube.position.set( 22.93, 7.2, -0.522 );
+    scene.add(cube);
+
+    const cube2 = new THREE.Mesh( geometry, material );
+    cube2.position.set( -9.43, 7.2, -0.522 );
+    scene.add(cube2);
+
+    const cube3 = new THREE.Mesh( geometry, material );
+    cube3.position.set( -18.02, 7.2, -19.59 );
+    scene.add(cube3);
+
+    const cube4 = new THREE.Mesh( geometry, material );
+    cube4.position.set( 14.35, 7.2, -19.59 );
+    scene.add(cube4);
+}
+
+const radiusTop =  0.75;  
+const radiusBottom = 0.75;  
+const height =  0.1;  
+const radialSegments = 50;  
+const geometry = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, radialSegments )
+
+const loader = new THREE.TextureLoader();
+const coinTexture = loader.load('coin.png');
+coinTexture.colorSpace = THREE.SRGBColorSpace;
+
+function makeInstance( geometry, texture, x , y , z ) {
+    const material = new THREE.MeshPhongMaterial( { 
+        map: texture,         
+        color: 0xffff00      
+    } );
+
+    const coin = new THREE.Mesh( geometry, material );
+    scene.add( coin );
+
+    coin.rotation.set(-Math.PI / 2, 0, -Math.PI / 2);
+
+    coin.position.x = x;
+    coin.position.y = y;
+    coin.position.z = z;
+
+    coin.userData = { originalPosition: { x, y, z }, collected: false };
+
+    return coin;
+}
+
+coins = [
+    makeInstance( geometry, coinTexture, -25 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, -20 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, -15 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, -10 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, -5 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, -0 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, 5 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, 10 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, 15 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, 20 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, 25 , 1.25 , 6 ),
+    makeInstance( geometry, coinTexture, 30 , 1.25 , 6 ),
+
+    makeInstance( geometry, coinTexture, -25 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, -20 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, -15 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, -10 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, -5 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, -0 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, 5 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, 10 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, 15 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, 20 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, 25 , 1.25 , -26 ),
+    makeInstance( geometry, coinTexture, 30 , 1.25 , -26 ),
+];
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate() {
+    if (isGameOver) {
+        requestAnimationFrame(animate);
+        return;
+    }
+    
+    requestAnimationFrame(animate);
+
+    const time = performance.now();
+
+    if (document.pointerLockElement === document.querySelector('#c')) {
+        
+        const delta = (time - prevTime) / 1000;
+
+        velocity.x -= velocity.x * 20.0 * delta;
+        velocity.z -= velocity.z * 20.0 * delta;
+        velocity.y -= 9.8 * 10.0 * delta; 
+
+        direction.z = Number(moveForward) - Number(moveBackward);
+        direction.x = Number(moveRight) - Number(moveLeft);
+        direction.normalize(); 
+
+        if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta;
+        if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
+
+        camera.translateX(velocity.x * delta);
+        camera.translateZ(velocity.z * delta);
+        camera.position.y += (velocity.y * delta);
+
+        if (camera.position.y < 1.6) { 
+            velocity.y = 0;
+            camera.position.y = 1.6;
+            canJump = true;
+        }
+
+        updateProjectiles(delta);
+        
+        updateEnemies(delta);
+        
+        if (gunModel) {
+            enemySpawnTimer += delta;
+            if (enemySpawnTimer >= enemySpawnInterval) {
+                spawnEnemy();
+                enemySpawnTimer = 0;
+            }
+        }
+    }
+
+    const timeInSeconds = time * 0.001; 
+    coins.forEach((coin, ndx) => {
+        if (!coin.userData.collected) { 
+            const speed = 1 + ndx * 0.1;
+            const rot = timeInSeconds * speed;
+            coin.rotation.x = rot;
+            coin.rotation.y = rot; 
+        }
+    });
+
+    coins.forEach((coin) => {
+        if (!coin.userData.collected) {
+            const distance = camera.position.distanceTo(coin.position);
+            if (distance < 1.5) { 
+                coin.userData.collected = true;
+                coin.visible = false; 
+                coinCount++;
+                document.getElementById('coinCounter').textContent = `Coins: ${coinCount}`;
+
+                if (coinCount === 24 && !gunModel) {
+                    loadGunModel();
+                }
+            }
+        }
+    });
+
+    if (gunModel) {
+        updateGunPosition();
+    }
+
+    prevTime = time;
+
+    renderer.render(scene, camera);
+}
+  </script>
+</html>
